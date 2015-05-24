@@ -14,7 +14,16 @@ class OMXPlayer(object):
 
     _LAUNCH_CMD = '/usr/bin/omxplayer -s %s %s'
     _PAUSE_CMD = 'p'
+    
     _TOGGLE_SUB_CMD = 's'
+    _SUB_DELAY_INC_CMD = 'd'
+    _SUB_DELAY_DEC_CMD = 'f'
+
+    _FF_600_CMD = '\c[[A'
+    _RW_600_CMD = '\c[[B'
+    _FF_30_CMD = '\c[[C'
+    _RW_30_CMD = '\c[[D'
+
     _QUIT_CMD = 'q'
 
     paused = False
@@ -55,7 +64,6 @@ class OMXPlayer(object):
             self.toggle_pause()
         self.toggle_subtitles()
 
-
     def _get_position(self):
         while True:
             index = self._process.expect([self._STATUS_REXP,
@@ -68,13 +76,31 @@ class OMXPlayer(object):
                 self.position = float(self._process.match.group(1))
             sleep(0.05)
 
-    def toggle_pause(self):
+    def _seek(self, direction=1, amount=30):
+        sdict = { -30: self._RW_30_CMD, -600: self._RW_600_CMD, 30: self._FF_30_CMD, 600: self._FF_600_CMD}
+        self._process.send(sdict[direction*amount])
+
+
+    def play(self):
+        if not self.paused: return
         if self._process.send(self._PAUSE_CMD):
             self.paused = not self.paused
+
+    def pause(self):
+        if self.paused: return
+        if self._process.send(self._PAUSE_CMD):
+            self.paused = not self.paused
+
+    def toggle_pause(self):
+        if self.paused: return
+        if self._process.send(self._PAUSE_CMD):
+            self.paused = not self.paused
+
 
     def toggle_subtitles(self):
         if self._process.send(self._TOGGLE_SUB_CMD):
             self.subtitles_visible = not self.subtitles_visible
+
     def stop(self):
         self._process.send(self._QUIT_CMD)
         self._process.terminate(force=True)
@@ -94,5 +120,12 @@ class OMXPlayer(object):
     def set_volume(self, volume):
         raise NotImplementedError
 
-    def seek(self, minutes):
-        raise NotImplementedError
+    def seek(self, seconds):
+        diff = seconds - self.position
+        direction = -1 if diff<0 else 1
+        while diff>=600:
+            self._seek(direction,600)
+            diff -= 600
+        while diff>=30:
+            self._seek(direction,60)
+            diff -= 60
